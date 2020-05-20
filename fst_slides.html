@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>fst package for dealing with big data</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="" />
+    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link href="libs/remark-css-0.0.1/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# fst package for dealing with big data
+## ༼ʘ̚ل͜ʘ̚༽
+
+---
+
+
+# The problem
+
+.pull-left[
+
+- 10 treatments applied to origin dataframe
+
+- Second level of another 10 treatments = 100 treatments
+
+- Third level of 10 treatments = 1000 (total 1111 dataframes)
+
+- Each dataframe is 4750 rows (total = 527,2500 rows)
+
+- All of the treatments need to be analysed
+
+]
+
+
+.pull-right[
+![](fst_slides_files/figure-html/dendro-1.png)&lt;!-- --&gt;
+]
+
+
+
+---
+
+# The problem
+
+- Origin dataframe (with all treatments) = 18 Gb
+
+- Analysis of model = 45 Gb output
+
+- Further analysis needs to read in 45 Gb data and do further computations
+
+- in R subsetting dataframes creates a copy of the original dataframe, both of which are stored in RAM.
+
+- Impossible on my personal laptop and an inefficient use of resources from NeSI
+
+
+
+---
+
+# Hello fst
+
+
+
+```r
+### Create something big(ish) 30000 rows, 100 variables plus an alphabetical id column
+a_lot_of_data &lt;- as.data.frame(
+  matrix(
+    rnorm(3000000),
+    nrow = 30000,
+    ncol = 100
+  )
+) %&gt;% 
+  mutate(id = rep(LETTERS[1:20], each=1500))
+
+### How big?
+print(object.size(a_lot_of_data), units = "Mb")
+```
+
+```
+## 23.1 Mb
+```
+
+```r
+### Save as RDS and as FST
+saveRDS(a_lot_of_data, "a_lot_of_data.Rds")
+fst::write.fst(a_lot_of_data, "a_lot_of_data.fst")
+```
+
+---
+# Size matters, the smaller the better...
+
+
+```r
+### Read in both formats
+a_lot_of_data_rds &lt;- readRDS("a_lot_of_data.rds")
+a_lot_of_data_fst &lt;- fst("a_lot_of_data.fst")
+```
+--
+
+```r
+### How Big are they now?
+## Rds, same as original
+print(object.size(a_lot_of_data_rds), units = "Mb")
+```
+
+```
+## 23.1 Mb
+```
+
+```r
+## fst, a lot smaller than original
+print(object.size(a_lot_of_data_fst), units = "Kb")
+```
+
+```
+## 9.2 Kb
+```
+
+---
+# Subsetting Rds
+
+
+```r
+### With Rds format we read in the entire dataframe and subset
+subset_rds &lt;- a_lot_of_data_rds[a_lot_of_data_rds$id == "E",  c("V98", "id")]
+print(object.size(subset_rds), units = "Kb")
+```
+
+```
+## 30.2 Kb
+```
+
+```r
+head(subset_rds)
+```
+
+```
+##              V98 id
+## 6001 -0.51112290  E
+## 6002 -0.49765488  E
+## 6003 -0.31884045  E
+## 6004  0.20671579  E
+## 6005 -0.09504017  E
+## 6006 -1.80881039  E
+```
+
+```r
+## Size total = 30.2 Kb + 23.1 Mb
+```
+---
+
+# Subsetting fst
+
+```r
+### fst subsets *without* reading entire dataframe into memory
+subset_fst &lt;- a_lot_of_data_fst[a_lot_of_data_fst$id == "E",  c("V98", "id")]
+head(subset_fst)
+```
+
+```
+##           V98 id
+## 1 -0.51112290  E
+## 2 -0.49765488  E
+## 3 -0.31884045  E
+## 4  0.20671579  E
+## 5 -0.09504017  E
+## 6 -1.80881039  E
+```
+
+```r
+print(object.size(subset_fst), units = "Kb")
+```
+
+```
+## 24.3 Kb
+```
+
+```r
+## Size total = 9.2 Kb + 24.3 Kb
+```
+
+---
+# tidyfst
+
+```r
+### Subsetting can also be done with tidyfst package that replicates some tidyverse functions
+subset_tidyfst &lt;- filter_dt(a_lot_of_data_fst, id == "C") %&gt;% 
+  select_dt(V98, id) #the tidyfst way of filtering fst data tables
+head(subset_tidyfst)  
+```
+
+```
+##            V98     id
+##          &lt;num&gt; &lt;char&gt;
+## 1: -0.32550465      C
+## 2: -0.13834626      C
+## 3:  0.20287833      C
+## 4: -0.05125201      C
+## 5: -1.15431396      C
+## 6:  0.19683755      C
+```
+
+---
+
+# Pros and cons
+
+.pull-left[
+## Rds
+
+- Capable of saving a list of outputs as one object (fst seems to only save a single object)
+
+- Saved output read back in same format, i.e., class (df, matrix...)
+
+\----------
+&lt;br&gt;
+
+
+- Slower to read/write
+
+]
+
+
+.pull-right[
+## fst
+
+- Can save huge amounts of memory!
+
+- read/write is much much faster than any other package
+
+&lt;br&gt;
+\----------
+&lt;br&gt;
+
+- Reads back as fst format which handles like a data.table rather than data.frame
+
+- I still save Rds as well as fst.
+
+]
+
+
+---
+# (ง°ل͜°)ง
+&lt;img src="multithreading.png" width="673" style="display: block; margin: auto;" /&gt;
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
