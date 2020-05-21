@@ -12,6 +12,13 @@ output:
       highlightLines: true
       countIncrementalSlides: false
 ---
+# Links
+
+- Slides: https://quinnasena.github.io/fst/fst_slides.html#1
+- fst ducumentation: https://cran.r-project.org/web/packages/fst/fst.pdf
+- tidyfst ducmentation: https://cran.r-project.org/web/packages/tidyfst/tidyfst.pdf
+- Detailed info: https://www.r-bloggers.com/lightning-fast-serialization-of-data-frames-using-the-fst-package/
+---
 
 # The problem
 
@@ -23,7 +30,7 @@ output:
 
 - Third level of 10 treatments = 1000 (total 1111 dataframes)
 
-- Each dataframe is 4750 rows (total = 527,2500 rows)
+- Each dataframe is 4750 rows (total = 5277250 rows)
 
 - All of the treatments need to be analysed
 
@@ -34,6 +41,7 @@ output:
 ```{r dendro, echo=FALSE, message=FALSE, fig.width=6, fig.height=6,fig.show='hold'}
 library(ggraph)
 library(igraph)
+library(microbenchmark)
 library(tidyverse)
 library(fst)
 library(tidyverse)
@@ -80,12 +88,12 @@ ggraph(mygraph, layout = 'dendrogram', circular = FALSE) +
 
 
 ```{r}
-### Create something big(ish) 30000 rows, 100 variables plus an alphabetical id column
+### Create something big(ish) 30000 rows, 200 variables plus an alphabetical id column
 a_lot_of_data <- as.data.frame(
   matrix(
     rnorm(3000000),
     nrow = 30000,
-    ncol = 100
+    ncol = 200
   )
 ) %>% 
   mutate(id = rep(LETTERS[1:20], each=1500))
@@ -96,6 +104,42 @@ print(object.size(a_lot_of_data), units = "Mb")
 saveRDS(a_lot_of_data, "a_lot_of_data.Rds")
 fst::write.fst(a_lot_of_data, "a_lot_of_data.fst")
 ```
+
+
+---
+
+# Write speed
+
+.pull-left[
+## Rds
+```{r}
+write_speed_rds <- microbenchmark(
+  saveRDS(a_lot_of_data, "a_lot_of_data.rds"),
+  times = 1
+)
+# speed in GB/s
+as.numeric(object.size(a_lot_of_data)) / write_speed_rds$time
+
+# speed in seconds
+write_speed_rds$time/1e9
+```
+]
+
+.pull-right[
+## fst
+```{r}
+write_speed_fst <- microbenchmark(
+  write_fst(a_lot_of_data, "a_lot_of_data.fst"),
+  times = 1
+)
+# speed in GB/s
+as.numeric(object.size(a_lot_of_data)) / write_speed_fst$time
+
+# speed in seconds
+write_speed_fst$time/1e9
+```
+]
+
 
 ---
 # Size matters, the smaller the better...
@@ -124,7 +168,7 @@ subset_rds <- a_lot_of_data_rds[a_lot_of_data_rds$id == "E",  c("V98", "id")]
 print(object.size(subset_rds), units = "Kb")
 head(subset_rds)
 
-## Size total = 30.2 Kb + 23.1 Mb
+## Size total = 30.2 Kb + 46 Mb
 ```
 ---
 
@@ -135,11 +179,28 @@ subset_fst <- a_lot_of_data_fst[a_lot_of_data_fst$id == "E",  c("V98", "id")]
 head(subset_fst)
 print(object.size(subset_fst), units = "Kb")
 
-## Size total = 9.2 Kb + 24.3 Kb
+## Size total = 16.3 Kb + 24.3 Kb
 ```
 
 ---
+
+# Read fst
+```{r}
+### fst can read-in part of a dataset but I think it only takes row numbers as an argument
+read_subset_fst <- read_fst("a_lot_of_data.fst", c("id","V98"), 1000, 2000)
+head(read_subset_fst)
+print(object.size(read_subset_fst), units = "Kb")
+
+## Size total = 16.6 Kb
+```
+
+
+
+---
 # tidyfst
+
+- fst does not handle like a regular dataframe (although can be converted after subsetting)
+
 ```{r}
 ### Subsetting can also be done with tidyfst package that replicates some tidyverse functions
 subset_tidyfst <- filter_dt(a_lot_of_data_fst, id == "C") %>% 

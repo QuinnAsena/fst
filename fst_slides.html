@@ -16,6 +16,13 @@ class: center, middle, inverse, title-slide
 
 ---
 
+# Links
+
+- Slides: https://quinnasena.github.io/fst/fst_slides.html#1
+- fst ducumentation: https://cran.r-project.org/web/packages/fst/fst.pdf
+- tidyfst ducmentation: https://cran.r-project.org/web/packages/tidyfst/tidyfst.pdf
+- Detailed info: https://www.r-bloggers.com/lightning-fast-serialization-of-data-frames-using-the-fst-package/
+---
 
 # The problem
 
@@ -63,12 +70,12 @@ class: center, middle, inverse, title-slide
 
 
 ```r
-### Create something big(ish) 30000 rows, 100 variables plus an alphabetical id column
+### Create something big(ish) 30000 rows, 200 variables plus an alphabetical id column
 a_lot_of_data &lt;- as.data.frame(
   matrix(
     rnorm(3000000),
     nrow = 30000,
-    ncol = 100
+    ncol = 200
   )
 ) %&gt;% 
   mutate(id = rep(LETTERS[1:20], each=1500))
@@ -78,7 +85,7 @@ print(object.size(a_lot_of_data), units = "Mb")
 ```
 
 ```
-## 23.1 Mb
+## 46 Mb
 ```
 
 ```r
@@ -86,6 +93,64 @@ print(object.size(a_lot_of_data), units = "Mb")
 saveRDS(a_lot_of_data, "a_lot_of_data.Rds")
 fst::write.fst(a_lot_of_data, "a_lot_of_data.fst")
 ```
+
+
+---
+
+# Write speed
+
+.pull-left[
+## Rds
+
+```r
+write_speed_rds &lt;- microbenchmark(
+  saveRDS(a_lot_of_data, "a_lot_of_data.rds"),
+  times = 1
+)
+# speed in GB/s
+as.numeric(object.size(a_lot_of_data)) / write_speed_rds$time
+```
+
+```
+## [1] 0.01119564
+```
+
+```r
+# speed in seconds
+write_speed_rds$time/1e9
+```
+
+```
+## [1] 4.311128
+```
+]
+
+.pull-right[
+## fst
+
+```r
+write_speed_fst &lt;- microbenchmark(
+  write_fst(a_lot_of_data, "a_lot_of_data.fst"),
+  times = 1
+)
+# speed in GB/s
+as.numeric(object.size(a_lot_of_data)) / write_speed_fst$time
+```
+
+```
+## [1] 0.2427596
+```
+
+```r
+# speed in seconds
+write_speed_fst$time/1e9
+```
+
+```
+## [1] 0.1988216
+```
+]
+
 
 ---
 # Size matters, the smaller the better...
@@ -105,7 +170,7 @@ print(object.size(a_lot_of_data_rds), units = "Mb")
 ```
 
 ```
-## 23.1 Mb
+## 46 Mb
 ```
 
 ```r
@@ -114,7 +179,7 @@ print(object.size(a_lot_of_data_fst), units = "Kb")
 ```
 
 ```
-## 9.2 Kb
+## 16.3 Kb
 ```
 
 ---
@@ -137,16 +202,16 @@ head(subset_rds)
 
 ```
 ##              V98 id
-## 6001 -0.51112290  E
-## 6002 -0.49765488  E
-## 6003 -0.31884045  E
-## 6004  0.20671579  E
-## 6005 -0.09504017  E
-## 6006 -1.80881039  E
+## 6001  0.41735455  E
+## 6002  0.33665486  E
+## 6003 -1.73025209  E
+## 6004  0.05583258  E
+## 6005  0.30318302  E
+## 6006 -1.16655821  E
 ```
 
 ```r
-## Size total = 30.2 Kb + 23.1 Mb
+## Size total = 30.2 Kb + 46 Mb
 ```
 ---
 
@@ -160,12 +225,12 @@ head(subset_fst)
 
 ```
 ##           V98 id
-## 1 -0.51112290  E
-## 2 -0.49765488  E
-## 3 -0.31884045  E
-## 4  0.20671579  E
-## 5 -0.09504017  E
-## 6 -1.80881039  E
+## 1  0.41735455  E
+## 2  0.33665486  E
+## 3 -1.73025209  E
+## 4  0.05583258  E
+## 5  0.30318302  E
+## 6 -1.16655821  E
 ```
 
 ```r
@@ -177,8 +242,42 @@ print(object.size(subset_fst), units = "Kb")
 ```
 
 ```r
-## Size total = 9.2 Kb + 24.3 Kb
+## Size total = 16.3 Kb + 24.3 Kb
 ```
+
+---
+
+# Read fst
+
+```r
+### fst can read-in part of a dataset as well but I think only takes row numbers as an argument
+read_subset_fst &lt;- read_fst("a_lot_of_data.fst", c("id","V98"), 1000, 2000)
+head(read_subset_fst)
+```
+
+```
+##   id        V98
+## 1  A -1.4940024
+## 2  A -1.2038256
+## 3  A -0.9004608
+## 4  A -0.8906375
+## 5  A -2.0800544
+## 6  A  0.8561425
+```
+
+```r
+print(object.size(read_subset_fst), units = "Kb")
+```
+
+```
+## 16.6 Kb
+```
+
+```r
+## Size total = 16.6 Kb
+```
+
+
 
 ---
 # tidyfst
@@ -191,14 +290,14 @@ head(subset_tidyfst)
 ```
 
 ```
-##            V98     id
-##          &lt;num&gt; &lt;char&gt;
-## 1: -0.32550465      C
-## 2: -0.13834626      C
-## 3:  0.20287833      C
-## 4: -0.05125201      C
-## 5: -1.15431396      C
-## 6:  0.19683755      C
+##             V98     id
+##           &lt;num&gt; &lt;char&gt;
+## 1: -2.039286671      C
+## 2:  0.004522084      C
+## 3: -0.639959345      C
+## 4:  0.204413088      C
+## 5: -0.039752216      C
+## 6:  0.901124769      C
 ```
 
 ---
