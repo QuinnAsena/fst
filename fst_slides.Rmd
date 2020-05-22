@@ -32,6 +32,8 @@ output:
 
 - Each dataframe is 4750 rows (total = 5277250 rows)
 
+- Multiplied by 100 replicates...
+
 - All of the treatments need to be analysed
 
 ]
